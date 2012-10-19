@@ -130,6 +130,7 @@ enum {
 #define TCPI_OPT_WSCALE		4
 #define TCPI_OPT_ECN		8 /* ECN was negociated at TCP session init */
 #define TCPI_OPT_ECN_SEEN	16 /* we received at least one packet with ECT */
+#define TCPI_OPT_SYN_DATA	32 /* SYN-ACK acked data in SYN sent or rcvd */
 
 enum tcp_ca_state {
 	TCP_CA_Open = 0,
@@ -395,7 +396,8 @@ struct tcp_sock {
 	u8	do_early_retrans:1,/* Enable RFC5827 early-retransmit  */
 		early_retrans_delayed:1, /* Delayed ER timer installed */
 		syn_data:1,	/* SYN includes data */
-		syn_fastopen:1;	/* SYN includes Fast Open option */
+		syn_fastopen:1,	/* SYN includes Fast Open option */
+		syn_data_acked:1;/* data in SYN is acked by SYN-ACK */
 
 /* RTT measurement */
 	u32	srtt;		/* smoothed round trip time << 3	*/
