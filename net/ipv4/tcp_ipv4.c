@@ -847,7 +847,6 @@ static void tcp_v4_reqsk_send_ack(struct sock *sk, struct sk_buff *skb,
  */
 static int tcp_v4_send_synack(struct sock *sk, struct dst_entry *dst,
 			      struct request_sock *req,
-			      struct request_values *rvp,
 			      u16 queue_mapping,
 			      bool nocache)
 {
@@ -860,7 +859,7 @@ static int tcp_v4_send_synack(struct sock *sk, struct dst_entry *dst,
 	if (!dst && (dst = inet_csk_route_req(sk, &fl4, req)) == NULL)
 		return -1;
 
-	skb = tcp_make_synack(sk, dst, req, rvp, NULL);
+	skb = tcp_make_synack(sk, dst, req, NULL);
 
 	if (skb) {
 		__tcp_v4_send_check(skb, ireq->loc_addr, ireq->rmt_addr);
@@ -877,11 +876,10 @@ static int tcp_v4_send_synack(struct sock *sk, struct dst_entry *dst,
 	return err;
 }
 
-static int tcp_v4_rtx_synack(struct sock *sk, struct request_sock *req,
-			      struct request_values *rvp)
+static int tcp_v4_rtx_synack(struct sock *sk, struct request_sock *req)
 {
 	TCP_INC_STATS_BH(sock_net(sk), TCP_MIB_RETRANSSEGS);
-	return tcp_v4_send_synack(sk, NULL, req, rvp, 0, false);
+	return tcp_v4_send_synack(sk, NULL, req, 0, false);
 }
 
 /*
@@ -1296,9 +1294,7 @@ static const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
-	struct tcp_extend_values tmp_ext;
 	struct tcp_options_received tmp_opt;
-	const u8 *hash_location;
 	struct request_sock *req;
 	struct inet_request_sock *ireq;
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -1345,42 +1341,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	tcp_clear_options(&tmp_opt);
 	tmp_opt.mss_clamp = TCP_MSS_DEFAULT;
 	tmp_opt.user_mss  = tp->rx_opt.user_mss;
-	tcp_parse_options(skb, &tmp_opt, &hash_location, 0,
-	    want_cookie ? NULL : &foc);
-
-	if (tmp_opt.cookie_plus > 0 &&
-	    tmp_opt.saw_tstamp &&
-	    !tp->rx_opt.cookie_out_never &&
-	    (sysctl_tcp_cookie_size > 0 ||
-	     (tp->cookie_values != NULL &&
-	      tp->cookie_values->cookie_desired > 0))) {
-		u8 *c;
-		u32 *mess = &tmp_ext.cookie_bakery[COOKIE_DIGEST_WORDS];
-		int l = tmp_opt.cookie_plus - TCPOLEN_COOKIE_BASE;
-
-		if (tcp_cookie_generator(&tmp_ext.cookie_bakery[0]) != 0)
-			goto drop_and_release;
-
-		/* Secret recipe starts with IP addresses */
-		*mess++ ^= (__force u32)daddr;
-		*mess++ ^= (__force u32)saddr;
-
-		/* plus variable length Initiator Cookie */
-		c = (u8 *)mess;
-		while (l-- > 0)
-			*c++ ^= *hash_location++;
-
-		want_cookie = false;	/* not our kind of cookie */
-		tmp_ext.cookie_out_never = 0; /* false */
-		tmp_ext.cookie_plus = tmp_opt.cookie_plus;
-	} else if (!tp->rx_opt.cookie_in_always) {
-		/* redundant indications, but ensure initialization. */
-		tmp_ext.cookie_out_never = 1; /* true */
-		tmp_ext.cookie_plus = 0;
-	} else {
-		goto drop_and_release;
-	}
-	tmp_ext.cookie_in_always = tp->rx_opt.cookie_in_always;
+	tcp_parse_options(skb, &tmp_opt, 0, want_cookie ? NULL : &foc);
 
 	if (want_cookie && !tmp_opt.saw_tstamp)
 		tcp_clear_options(&tmp_opt);
@@ -1462,8 +1423,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	 * latter to remove its dependency on the current implementation
 	 * of tcp_v4_send_synack()->tcp_select_initial_window().
 	 */
-	skb_synack = tcp_make_synack(sk, dst, req,
-	    (struct request_values *)&tmp_ext, &foc;
+	skb_synack = tcp_make_synack(sk, dst, req, &foc);
 
 	if (skb_synack) {
 		__tcp_v4_send_check(skb_synack, ireq->loc_addr, ireq->rmt_addr);
@@ -1483,8 +1443,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		tcp_rsk(req)->listener = NULL;
 		/* Add the request_sock to the SYN table */
 		inet_csk_reqsk_queue_hash_add(sk, req, TCP_TIMEOUT_INIT);
-	} else if (tcp_v4_conn_req_fastopen(sk, skb, skb_synack, req,
-	    (struct request_values *)&tmp_ext))
+	} else if (tcp_v4_conn_req_fastopen(sk, skb, skb_synack, req))
 		goto drop_and_free;
 
 	return 0;
@@ -2021,12 +1980,6 @@ void tcp_v4_destroy_sock(struct sock *sk)
 	if (inet_csk(sk)->icsk_bind_hash)
 		inet_put_port(sk);
 
-	/* TCP Cookie Transactions */
-	if (tp->cookie_values != NULL) {
-		kref_put(&tp->cookie_values->kref,
-			 tcp_cookie_values_release);
-		tp->cookie_values = NULL;
-	}
 	BUG_ON(tp->fastopen_rsk != NULL);
 
 	/* If socket is aborted during connect operation */
