@@ -284,6 +284,11 @@ int proc_tcp_fastopen_key(ctl_table *ctl, int write, void __user *buffer,
 			ret = -EINVAL;
 			goto bad_key;
 		}
+		/* Generate a dummy secret but don't publish it. This
+		 * is needed so we don't regenerate a new key on the
+		 * first invocation of tcp_fastopen_cookie_gen
+		 */
+		tcp_fastopen_init_key_once(false);
 		tcp_fastopen_reset_cipher(user_key, TCP_FASTOPEN_KEY_LENGTH);
 	}
 
