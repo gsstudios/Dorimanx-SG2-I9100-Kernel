@@ -526,12 +526,8 @@ static inline void irq_set_percpu_devid_flags(unsigned int irq)
 }
 
 /* Handle dynamic irq creation and destruction */
-extern unsigned int create_irq_nr(unsigned int irq_want, int node);
-extern unsigned int __create_irqs(unsigned int from, unsigned int count,
-				  int node);
 extern int create_irq(void);
 extern void destroy_irq(unsigned int irq);
-extern void destroy_irqs(unsigned int irq, unsigned int count);
 
 /* Set/get chip/data for an IRQ: */
 extern int irq_set_chip(unsigned int irq, struct irq_chip *chip);
