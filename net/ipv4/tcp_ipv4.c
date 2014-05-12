@@ -1309,7 +1309,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	bool want_cookie = false;
 	struct flowi4 fl4;
 	struct tcp_fastopen_cookie foc = { .len = -1 };
-	struct tcp_fastopen_cookie valid_foc = { .len = -1 };
 	struct sk_buff *skb_synack;
 	int do_fastopen;
 
@@ -1449,7 +1448,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		if (dst == NULL)
 			goto drop_and_free;
 	}
-	do_fastopen = tcp_fastopen_check(sk, skb, req, &foc, &valid_foc);
+	do_fastopen = !want_cookie &&
+		      tcp_fastopen_check(sk, skb, req, &foc);
 
 	/* We don't call tcp_v4_send_synack() directly because we need
 	 * to make sure a child socket can be created successfully before
@@ -1463,8 +1463,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	 * of tcp_v4_send_synack()->tcp_select_initial_window().
 	 */
 	skb_synack = tcp_make_synack(sk, dst, req,
-	    (struct request_values *)&tmp_ext,
-	    fastopen_cookie_present(&valid_foc) ? &valid_foc : NULL);
+	    (struct request_values *)&tmp_ext, &foc;
 
 	if (skb_synack) {
 		__tcp_v4_send_check(skb_synack, ireq->loc_addr, ireq->rmt_addr);
@@ -1484,9 +1483,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		tcp_rsk(req)->listener = NULL;
 		/* Add the request_sock to the SYN table */
 		inet_csk_reqsk_queue_hash_add(sk, req, TCP_TIMEOUT_INIT);
-		if (fastopen_cookie_present(&foc) && foc.len != 0)
-			NET_INC_STATS_BH(sock_net(sk),
-			    LINUX_MIB_TCPFASTOPENPASSIVEFAIL);
 	} else if (tcp_v4_conn_req_fastopen(sk, skb, skb_synack, req,
 	    (struct request_values *)&tmp_ext))
 		goto drop_and_free;
