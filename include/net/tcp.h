@@ -1132,6 +1132,8 @@ static inline void tcp_synack_rtt_meas(struct sock *sk,
 		tcp_valid_rtt_meas(sk,
 		    tcp_time_stamp - tcp_rsk(req)->snt_synack);
 }
+extern void tcp_openreq_init_rwin(struct request_sock *req,
+				  struct sock *sk, struct dst_entry *dst);
 
 extern void tcp_enter_memory_pressure(struct sock *sk);
 
@@ -1342,13 +1344,10 @@ void tcp_free_fastopen_req(struct tcp_sock *tp);
 
 extern struct tcp_fastopen_context __rcu *tcp_fastopen_ctx;
 int tcp_fastopen_reset_cipher(void *key, unsigned int len);
-int tcp_fastopen_create_child(struct sock *sk,
-			      struct sk_buff *skb,
-			      struct sk_buff *skb_synack,
-			      struct request_sock *req);
-bool tcp_fastopen_check(struct sock *sk, struct sk_buff *skb,
-			struct request_sock *req,
-			struct tcp_fastopen_cookie *foc);
+bool tcp_try_fastopen(struct sock *sk, struct sk_buff *skb,
+		      struct request_sock *req,
+		      struct tcp_fastopen_cookie *foc,
+		      struct dst_entry *dst);
 void tcp_fastopen_init_key_once(bool publish);
 #define TCP_FASTOPEN_KEY_LENGTH 16
 
