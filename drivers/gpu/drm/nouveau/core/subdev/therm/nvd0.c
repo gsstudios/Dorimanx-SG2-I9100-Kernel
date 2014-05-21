@@ -38,6 +38,7 @@ pwm_info(struct nouveau_therm *therm, int line)
 		switch (gpio & 0x0000001f) {
 		case 0x19: return 1;
 		case 0x1c: return 0;
+		case 0x1e: return 2;
 		default:
 			break;
 		}
