@@ -1559,7 +1559,6 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 		goto out;
 
 	pmd = pmd_offset(pud, addr);
-	BUG_ON(pmd_trans_huge(*pmd));
 	if (!pmd_present(*pmd))
 		goto out;
 
