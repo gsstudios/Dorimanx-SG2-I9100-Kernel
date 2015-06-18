@@ -2615,10 +2615,13 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 
 	case TCP_FASTOPEN:
 		if (val >= 0 && ((1 << sk->sk_state) & (TCPF_CLOSE |
-		    TCPF_LISTEN)))
+		    TCPF_LISTEN))) {
+			tcp_fastopen_init_key_once(true);
+
 			err = fastopen_init_queue(sk, val);
-		else
+		} else {
 			err = -EINVAL;
+		}
 		break;
 	default:
 		err = -ENOPROTOOPT;
