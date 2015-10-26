@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "LD 1"
-.TH LD 1 "2015-10-01" "binutils-2.25.2" "GNU Development Tools"
+.TH LD 1 "2015-10-25" "binutils-2.25.2" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -2496,6 +2496,14 @@ or in relaxation.  If \fB\-\-insn32\fR is used, then the linker only uses
 32\-bit instruction encodings.  By default or if \fB\-\-no\-insn32\fR is
 used, all instruction encodings are used, including 16\-bit ones where
 possible.
+.IP "\fB\-\-compact\-branches\fR" 4
+.IX Item "--compact-branches"
+.PD 0
+.IP "\fB\-\-compact\-branches\fR" 4
+.IX Item "--compact-branches"
+.PD
+These options control the generation of compact instructions by the linker
+in the \s-1PLT\s0 entries for \s-1MIPS R6.\s0
 .SH "ENVIRONMENT"
 .IX Header "ENVIRONMENT"
 You can change the behaviour of \fBld\fR with the environment variables
