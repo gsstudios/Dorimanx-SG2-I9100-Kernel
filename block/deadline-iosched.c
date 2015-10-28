@@ -17,11 +17,12 @@
 /*
  * See Documentation/block/deadline-iosched.txt
  */
-static const int read_expire = 100 / 4;  /* max time before a read is submitted. */
-static const int write_expire = 2 * 100; /* ditto for writes, these limits are SOFT! */
-static const int writes_starved = 1;    /* max times reads can starve a write */
-static const int fifo_batch = 1;       /* # of sequential requests treated as one
-				     by the above parameters. For throughput. */
+static const int read_expire = HZ / 2;	/* max time before a read is submitted. */
+static const int write_expire = 5 * HZ;	/* ditto for writes, these limits are SOFT! */
+static const int writes_starved = 2;	/* max times reads can starve a write */
+static const int fifo_batch = 4;	/* # of sequential requests treated as one
+					   by the above parameters. For throughput. */
+static const int front_merges = 1;
 
 struct deadline_data {
 	/*
@@ -132,7 +133,7 @@ deadline_merge(struct request_queue *q, struct request **req, struct bio *bio)
 	 * check for front merge
 	 */
 	if (dd->front_merges) {
-		sector_t sector = bio->bi_iter.bi_sector + bio_sectors(bio);
+		sector_t sector = bio_end_sector(bio);
 
 		__rq = elv_rb_find(&dd->sort_list[bio_data_dir(bio)], sector);
 		if (__rq) {
@@ -174,9 +175,9 @@ deadline_merged_requests(struct request_queue *q, struct request *req,
 	 * and move into next position (next will be deleted) in fifo
 	 */
 	if (!list_empty(&req->queuelist) && !list_empty(&next->queuelist)) {
-		if (time_before(rq_fifo_time(next), rq_fifo_time(req))) {
+		if (time_before(next->fifo_time, req->fifo_time)) {
 			list_move(&req->queuelist, &next->queuelist);
-			req->fifo_time = rq_fifo_time(next);
+			req->fifo_time = next->fifo_time;
 		}
 	}
 
@@ -230,7 +231,7 @@ static inline int deadline_check_fifo(struct deadline_data *dd, int ddir)
 	/*
 	 * rq is expired!
 	 */
-	if (time_after_eq(jiffies, rq_fifo_time(rq)))
+	if (time_after_eq(jiffies, rq->fifo_time))
 		return 1;
 
 	return 0;
@@ -360,7 +361,7 @@ static int deadline_init_queue(struct request_queue *q, struct elevator_type *e)
 	dd->fifo_expire[READ] = read_expire;
 	dd->fifo_expire[WRITE] = write_expire;
 	dd->writes_starved = writes_starved;
-	dd->front_merges = 1;
+	dd->front_merges = front_merges;
 	dd->fifo_batch = fifo_batch;
 
 	spin_lock_irq(q->queue_lock);

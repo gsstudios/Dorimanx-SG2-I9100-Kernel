@@ -87,11 +87,11 @@ struct row_queue_params {
 static const struct row_queue_params row_queues_def[] = {
 /* idling_enabled, quantum, is_urgent */
 	{true, 10, true},	/* ROWQ_PRIO_HIGH_READ */
-	{false, 5, true},	/* ROWQ_PRIO_HIGH_SWRITE */
-	{true, 80, true},	/* ROWQ_PRIO_REG_READ */
+	{false, 1, false},	/* ROWQ_PRIO_HIGH_SWRITE */
+	{true, 100, true},	/* ROWQ_PRIO_REG_READ */
 	{false, 1, false},	/* ROWQ_PRIO_REG_SWRITE */
-	{false, 20, true},	/* ROWQ_PRIO_REG_WRITE */
-	{false, 5, false},	/* ROWQ_PRIO_LOW_READ */
+	{false, 1, false},	/* ROWQ_PRIO_REG_WRITE */
+	{false, 1, false},	/* ROWQ_PRIO_LOW_READ */
 	{false, 1, false}	/* ROWQ_PRIO_LOW_SWRITE */
 };
 
@@ -331,6 +331,10 @@ static void row_add_request(struct request_queue *q,
 	struct row_queue *rqueue = RQ_ROWQ(rq);
 	s64 diff_ms;
 	bool queue_was_empty = list_empty(&rqueue->fifo);
+	unsigned long bv_page_flags = 0;
+
+	if (rq->bio && rq->bio->bi_io_vec && rq->bio->bi_io_vec->bv_page)
+		bv_page_flags = rq->bio->bi_io_vec->bv_page->flags;
 
 	list_add_tail(&rq->queuelist, &rqueue->fifo);
 	rd->nr_reqs[rq_data_dir(rq)]++;
@@ -363,7 +367,9 @@ static void row_add_request(struct request_queue *q,
 			rqueue->idle_data.begin_idling = false;
 			return;
 		}
-		if (diff_ms < rd->rd_idle_data.freq_ms) {
+
+		if ((bv_page_flags & (1L << PG_readahead)) ||
+		    (diff_ms < rd->rd_idle_data.freq_ms)) {
 			rqueue->idle_data.begin_idling = true;
 			row_log_rowq(rd, rqueue->prio, "Enable idling");
 		} else {
@@ -892,7 +898,7 @@ static enum row_queue_prio row_get_queue_prio(struct request *rq,
 	const int data_dir = rq_data_dir(rq);
 	const bool is_sync = rq_is_sync(rq);
 	enum row_queue_prio q_type = ROWQ_MAX_PRIO;
-	int ioprio_class = IOPRIO_PRIO_CLASS(rq->elv.icq->ioc->ioprio);
+	int ioprio_class = IOPRIO_PRIO_CLASS(rq->ioprio);
 
 	switch (ioprio_class) {
 	case IOPRIO_CLASS_RT:
@@ -940,7 +946,8 @@ static enum row_queue_prio row_get_queue_prio(struct request *rq,
  *
  */
 static int
-row_set_request(struct request_queue *q, struct request *rq, struct bio *bio, gfp_t gfp_mask)
+row_set_request(struct request_queue *q, struct request *rq,
+		struct bio *bio, gfp_t gfp_mask)
 {
 	struct row_data *rd = (struct row_data *)q->elevator->elevator_data;
 	unsigned long flags;
@@ -1085,8 +1092,7 @@ static struct elevator_type iosched_row = {
 
 static int __init row_init(void)
 {
-	elv_register(&iosched_row);
-	return 0;
+	return elv_register(&iosched_row);
 }
 
 static void __exit row_exit(void)
