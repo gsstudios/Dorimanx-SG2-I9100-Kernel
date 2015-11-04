@@ -22,7 +22,7 @@ END-INFO-DIR-ENTRY
 
    This is the Tenth Edition, of 'Debugging with GDB: the GNU
 Source-Level Debugger' for GDB (UBERTC-4.9.4) Version
-7.8.50.20151025-cvs.
+7.8.50.20151101-cvs.
 
    Copyright (C) 1988-2014 Free Software Foundation, Inc.
 
@@ -46,7 +46,7 @@ Debugging with GDB
 This file describes GDB, the GNU symbolic debugger.
 
    This is the Tenth Edition, for GDB (UBERTC-4.9.4) Version
-7.8.50.20151025-cvs.
+7.8.50.20151101-cvs.
 
    Copyright (C) 1988-2014 Free Software Foundation, Inc.
 
@@ -493,7 +493,7 @@ Let us use GDB to try to see what is going on.
      There is absolutely no warranty for GDB; type "show warranty"
       for details.
 
-     GDB 7.8.50.20151025-cvs, Copyright 1999 Free Software Foundation, Inc...
+     GDB 7.8.50.20151101-cvs, Copyright 1999 Free Software Foundation, Inc...
      (gdb)
 
 GDB reads only enough symbol data to know where to find the rest when
@@ -36726,7 +36726,7 @@ and TeX (or 'texi2roff') to typeset the printed version.
 
    GDB includes an already formatted copy of the on-line Info version of
 this manual in the 'gdb' subdirectory.  The main Info file is
-'gdb-7.8.50.20151025-cvs/gdb/gdb.info', and it refers to subordinate
+'gdb-7.8.50.20151101-cvs/gdb/gdb.info', and it refers to subordinate
 files matching 'gdb.info*' in the same directory.  If necessary, you can
 print out these files, or read them with any editor; but they are easier
 to read using the 'info' subsystem in GNU Emacs or the standalone 'info'
@@ -36736,8 +36736,8 @@ program, available as part of the GNU Texinfo distribution.
 Info formatting programs, such as 'texinfo-format-buffer' or 'makeinfo'.
 
    If you have 'makeinfo' installed, and are in the top level GDB source
-directory ('gdb-7.8.50.20151025-cvs', in the case of version
-7.8.50.20151025-cvs), you can make the Info file by typing:
+directory ('gdb-7.8.50.20151101-cvs', in the case of version
+7.8.50.20151101-cvs), you can make the Info file by typing:
 
      cd gdb
      make gdb.info
@@ -36762,7 +36762,7 @@ On its own, TeX cannot either read or typeset a Texinfo file.
 
    If you have TeX and a DVI printer program installed, you can typeset
 and print this manual.  First switch to the 'gdb' subdirectory of the
-main source directory (for example, to 'gdb-7.8.50.20151025-cvs/gdb')
+main source directory (for example, to 'gdb-7.8.50.20151101-cvs/gdb')
 and type:
 
      make gdb.dvi
@@ -36771,8 +36771,8 @@ and type:
 
    ---------- Footnotes ----------
 
-   (1) In 'gdb-7.8.50.20151025-cvs/gdb/refcard.ps' of the version
-7.8.50.20151025-cvs release.
+   (1) In 'gdb-7.8.50.20151101-cvs/gdb/refcard.ps' of the version
+7.8.50.20151101-cvs release.
 
 
 File: gdb.info,  Node: Installing GDB,  Next: Maintenance Commands,  Prev: Formatting Documentation,  Up: Top
@@ -36875,39 +36875,39 @@ preparing GDB for installation; you can then use 'make' to build the
 a single directory, whose name is usually composed by appending the
 version number to 'gdb'.
 
-   For example, the GDB version 7.8.50.20151025-cvs distribution is in
-the 'gdb-7.8.50.20151025-cvs' directory.  That directory contains:
+   For example, the GDB version 7.8.50.20151101-cvs distribution is in
+the 'gdb-7.8.50.20151101-cvs' directory.  That directory contains:
 
-'gdb-7.8.50.20151025-cvs/configure (and supporting files)'
+'gdb-7.8.50.20151101-cvs/configure (and supporting files)'
      script for configuring GDB and all its supporting libraries
 
-'gdb-7.8.50.20151025-cvs/gdb'
+'gdb-7.8.50.20151101-cvs/gdb'
      the source specific to GDB itself
 
-'gdb-7.8.50.20151025-cvs/bfd'
+'gdb-7.8.50.20151101-cvs/bfd'
      source for the Binary File Descriptor library
 
-'gdb-7.8.50.20151025-cvs/include'
+'gdb-7.8.50.20151101-cvs/include'
      GNU include files
 
-'gdb-7.8.50.20151025-cvs/libiberty'
+'gdb-7.8.50.20151101-cvs/libiberty'
      source for the '-liberty' free software library
 
-'gdb-7.8.50.20151025-cvs/opcodes'
+'gdb-7.8.50.20151101-cvs/opcodes'
      source for the library of opcode tables and disassemblers
 
-'gdb-7.8.50.20151025-cvs/readline'
+'gdb-7.8.50.20151101-cvs/readline'
      source for the GNU command-line interface
 
-'gdb-7.8.50.20151025-cvs/glob'
+'gdb-7.8.50.20151101-cvs/glob'
      source for the GNU filename pattern-matching subroutine
 
-'gdb-7.8.50.20151025-cvs/mmalloc'
+'gdb-7.8.50.20151101-cvs/mmalloc'
      source for the GNU memory-mapped malloc package
 
    The simplest way to configure and build GDB is to run 'configure'
 from the 'gdb-VERSION-NUMBER' source directory, which in this example is
-the 'gdb-7.8.50.20151025-cvs' directory.
+the 'gdb-7.8.50.20151101-cvs' directory.
 
    First switch to the 'gdb-VERSION-NUMBER' source directory if you are
 not already in it; then run 'configure'.  Pass the identifier for the
@@ -36915,7 +36915,7 @@ platform on which GDB will run as an argument.
 
    For example:
 
-     cd gdb-7.8.50.20151025-cvs
+     cd gdb-7.8.50.20151101-cvs
      ./configure HOST
      make
 
@@ -36937,8 +36937,8 @@ need to run 'sh' on it explicitly:
 
    If you run 'configure' from a directory that contains source
 directories for multiple libraries or programs, such as the
-'gdb-7.8.50.20151025-cvs' source directory for version
-7.8.50.20151025-cvs, 'configure' creates configuration files for every
+'gdb-7.8.50.20151101-cvs' source directory for version
+7.8.50.20151101-cvs, 'configure' creates configuration files for every
 directory level underneath (unless you tell it not to, with the
 '--norecursion' option).
 
@@ -36978,13 +36978,13 @@ to specify a path to find 'configure' itself from your working
 directory.  If the path to 'configure' would be the same as the argument
 to '--srcdir', you can leave out the '--srcdir' option; it is assumed.)
 
-   For example, with version 7.8.50.20151025-cvs, you can build GDB in a
+   For example, with version 7.8.50.20151101-cvs, you can build GDB in a
 separate directory for a Sun 4 like this:
 
-     cd gdb-7.8.50.20151025-cvs
+     cd gdb-7.8.50.20151101-cvs
      mkdir ../gdb-sun4
      cd ../gdb-sun4
-     ../gdb-7.8.50.20151025-cvs/configure sun4
+     ../gdb-7.8.50.20151101-cvs/configure sun4
      make
 
    When 'configure' builds a configuration using a remote source
@@ -36995,7 +36995,7 @@ the example, you'd find the Sun 4 library 'libiberty.a' in the directory
 
    Make sure that your path to the 'configure' script has just one
 instance of 'gdb' in it.  If your path to 'configure' looks like
-'../gdb-7.8.50.20151025-cvs/gdb/configure', you are configuring only one
+'../gdb-7.8.50.20151101-cvs/gdb/configure', you are configuring only one
 subdirectory of GDB, not the whole package.  This leads to build errors
 about missing include files such as 'bfd/bfd.h'.
 
@@ -37011,8 +37011,8 @@ a configured directory--whatever directory you were in when you called
 
    The 'Makefile' that 'configure' generates in each source directory
 also runs recursively.  If you type 'make' in a source directory such as
-'gdb-7.8.50.20151025-cvs' (or in a separate configured directory
-configured with '--srcdir=DIRNAME/gdb-7.8.50.20151025-cvs'), you will
+'gdb-7.8.50.20151101-cvs' (or in a separate configured directory
+configured with '--srcdir=DIRNAME/gdb-7.8.50.20151101-cvs'), you will
 build all the required libraries, and then build GDB.
 
    When you have multiple hosts or targets configured in separate
@@ -37057,7 +37057,7 @@ you can use it to test your guesses on abbreviations--for example:
      Invalid configuration `i986v': machine `i986v' not recognized
 
 'config.sub' is also distributed in the GDB source directory
-('gdb-7.8.50.20151025-cvs', for version 7.8.50.20151025-cvs).
+('gdb-7.8.50.20151101-cvs', for version 7.8.50.20151101-cvs).
 
 
 File: gdb.info,  Node: Configure Options,  Next: System-wide configuration,  Prev: Config Names,  Up: Installing GDB
