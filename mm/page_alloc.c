@@ -470,9 +470,6 @@ static inline void set_page_order(struct page *page, int order)
 {
 	set_page_private(page, order);
 	__SetPageBuddy(page);
-#ifdef CONFIG_PAGE_OWNER
-	page->order = -1;
-#endif
 }
 
 static inline void rmv_page_order(struct page *page)
@@ -975,11 +972,6 @@ static int fallbacks[MIGRATE_TYPES][4] = {
 	[MIGRATE_ISOLATE]     = { MIGRATE_RESERVE }, /* Never used */
 #endif
 };
-
-int *get_migratetype_fallbacks(int mtype)
-{
-	return fallbacks[mtype];
-}
 
 /*
  * Move the free pages in a range to the free lists of the requested type.
@@ -2373,22 +2365,6 @@ __perform_reclaim(gfp_t gfp_mask, unsigned int order, struct zonelist *zonelist,
 	return progress;
 }
 
-static void
-set_page_owner(struct page *page, unsigned int order, gfp_t gfp_mask)
-{
-#ifdef CONFIG_PAGE_OWNER
-	struct stack_trace *trace = &page->trace;
-	trace->nr_entries = 0;
-	trace->max_entries = ARRAY_SIZE(page->trace_entries);
-	trace->entries = &page->trace_entries[0];
-	trace->skip = 3;
-	save_stack_trace(&page->trace);
-
-	page->order = (int) order;
-	page->gfp_mask = gfp_mask;
-#endif /* CONFIG_PAGE_OWNER */
-}
-
 /* The really slow allocator path where we enter direct reclaim */
 static inline struct page *
 __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
@@ -2424,8 +2400,6 @@ retry:
 		goto retry;
 	}
 
-	if (page)
-		set_page_owner(page, order, gfp_mask);
 	return page;
 }
 
@@ -2770,8 +2744,6 @@ got_pg:
 	if (gfp_mask & __GFP_WAIT)
 		up_read(&page_alloc_slow_rwsem);
 
-	if (page)
-		set_page_owner(page, order, gfp_mask);
 	return page;
 }
 
@@ -2858,8 +2830,6 @@ out:
 
 	memcg_kmem_commit_charge(page, memcg, order);
 
-	if (page)
-		set_page_owner(page, order, gfp_mask);
 	return page;
 }
 EXPORT_SYMBOL(__alloc_pages_nodemask);
@@ -4165,9 +4135,6 @@ void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		/* The shift won't overflow because ZONE_NORMAL is below 4G. */
 		if (!is_highmem_idx(zone))
 			set_page_address(page, __va(pfn << PAGE_SHIFT));
-#endif
-#ifdef CONFIG_PAGE_OWNER
-		page->order = -1;
 #endif
 	}
 }
@@ -6601,12 +6568,6 @@ static const struct trace_print_flags pageflag_names[] = {
 #endif
 	/* needed for ROW gov, do not remove */
 	{1UL << PG_readahead,           "PG_readahead"  },
-#ifdef CONFIG_KSM_CHECK_PAGE
-	{1UL << PG_ksm_scan0,           "PG_ksm_scan0"  },
-#endif
-#ifdef CONFIG_ZCACHE
-	{1UL << PG_was_active,           "PG_was_active"  },
-#endif
 };
 
 static void dump_page_flags(unsigned long flags)
