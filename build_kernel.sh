@@ -246,11 +246,11 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	# create zip-file for kernel
 	# kernel zip name is based on toolchain used, modify to however you like
 	if [ "a$GCCVERSION" == "a0409" ]; then
-		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-GSSTUDIOS-LINARO-4.9-TRIM"`.zip .;
+		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-SABER-LINARO-4.9-TRIM"`.zip .;
 	elif [ "a$GCCVERSION" == "a0601" ]; then
-		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-GSSTUDIOS-UBER-6.1-TRIM"`.zip .;
+		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-SABER-UBER-6.1-TRIM"`.zip .;
 	else
-		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-GSSTUDIOS-TRIM"`.zip .;
+		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-KK-SGII-SABER-TRIM"`.zip .;
 	fi;
 
 #	# push to android
