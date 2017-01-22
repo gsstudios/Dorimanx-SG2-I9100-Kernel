@@ -155,8 +155,7 @@ enum power_supply_property {
 };
 
 enum power_supply_type {
-	POWER_SUPPLY_TYPE_UNKNOWN = 0,
-	POWER_SUPPLY_TYPE_BATTERY,
+	POWER_SUPPLY_TYPE_BATTERY = 0,
 	POWER_SUPPLY_TYPE_UPS,
 	POWER_SUPPLY_TYPE_MAINS,
 	POWER_SUPPLY_TYPE_USB,		/* Standard Downstream Port */
@@ -168,6 +167,7 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_WIRELESS,
 	POWER_SUPPLY_TYPE_UARTOFF,
 	POWER_SUPPLY_TYPE_OTG,
+	POWER_SUPPLY_TYPE_UNKNOWN,
 };
 
 enum {

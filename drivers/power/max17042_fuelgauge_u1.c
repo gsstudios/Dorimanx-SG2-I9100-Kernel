@@ -890,7 +890,7 @@ static int max17042_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 
 	chip->battery.name		= "fuelgauge";
-	chip->battery.type		= POWER_SUPPLY_TYPE_BATTERY;
+	chip->battery.type		= POWER_SUPPLY_TYPE_UNKNOWN;
 	chip->battery.get_property	= max17042_get_property;
 	chip->battery.set_property	= max17042_set_property;
 	chip->battery.properties	= max17042_battery_props;
