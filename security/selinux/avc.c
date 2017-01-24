@@ -766,7 +766,7 @@ noinline int slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
 	sad.ssid = ssid;
 	sad.tsid = tsid;
 	sad.audited = audited;
-	sad.denied = denied;
+	sad.denied = 0;
 	sad.result = result;
 
 	a->selinux_audit_data = &sad;
