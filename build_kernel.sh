@@ -129,7 +129,7 @@ fi;
 . $KERNELDIR/.config;
 
 # get version from config
-GETVER=`grep 'Siyah-.*-V' .config |sed 's/Siyah-//g' | sed 's/.*".//g' | sed 's/-M.*//g'`;
+GETVER=`grep 'Siyah-.*-V' .config |sed 's/Siyah-//g' | sed 's/.*".//g' | sed 's/-N.*//g'`;
 
 # remove previous zImage files
 if [ -e $KERNELDIR/zImage ]; then
