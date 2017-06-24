@@ -354,7 +354,8 @@ static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 	if (ret != 1)
 		return -EINVAL;
 
-	dbs_tuners_ins.io_is_busy = !!input;
+	/* dbs_tuners_ins.io_is_busy = !!input; */
+	dbs_tuners_ins.io_is_busy = 0;
 
 	return count;
 }
