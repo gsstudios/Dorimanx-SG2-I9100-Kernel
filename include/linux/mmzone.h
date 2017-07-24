@@ -75,7 +75,6 @@ enum {
 bool is_cma_pageblock(struct page *page);
 #endif
 
-
 /*
  * Returns a list which contains the migrate types on to which
  * an allocation falls back when the free list for the migrate
