@@ -81,7 +81,7 @@
 #define MAX_CORES					(2)
 
 // ZZ: enable/disable hotplug support
-#define ENABLE_HOTPLUGGING
+// #define ENABLE_HOTPLUGGING
 
 // ZZ: enable support for native hotplugging on snapdragon platform
 // #define SNAP_NATIVE_HOTPLUGGING
