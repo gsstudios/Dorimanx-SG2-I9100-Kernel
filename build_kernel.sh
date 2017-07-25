@@ -66,41 +66,14 @@ echo  "a$GCCVERSION";
 # compiler detection
 if [ "a$GCCVERSION" == "a0404" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_old_gcc $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.3.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0404" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_old_gcc $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.4.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0405" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_old_gcc $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.5.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0406" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.6.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0407" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.7.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0408" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 4.8.X Compiler Detected, building";
 elif [ "a$GCCVERSION" == "a0409" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 4.9.X Compiler Detected, building";
 elif [ "a$GCCVERSION" == "a0501" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 5.1.x Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0502" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 5.2.x Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0503" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 5.3.x Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0504" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 5.4.x Compiler Detected, building";
 elif [ "a$GCCVERSION" == "a0600" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 6.0.x Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0601" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 6.1.x Compiler Detected, building";
 else
@@ -234,26 +207,8 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	stat $KERNELDIR/zImage || exit 1;
 	cp $KERNELDIR/zImage /$KERNELDIR/READY/boot/;
 
-	# create zip-file for kernel
-	# kernel zip name is based on toolchain used, modify to however you like
-	if [ "a$GCCVERSION" == "a0409" ]; then
-		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-N-SGII-SABER-LINARO-4.9"`.zip .;
-	else
-		cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-N-SGII-SABER"`.zip .;
-	fi;
-
-#	# push to android
-#	ADB_STATUS=`adb get-state`;
-#	if [ "$ADB_STATUS" == "device" ]; then
-#		read -t 3 -p "push kernel to android, 3sec timeout (y/n)?";
-#		if [ "$REPLY" == "y" ]; then
-#			adb push $KERNELDIR/READY/Kernel_*MM*.zip /sdcard/;
-#			read -t 3 -p "reboot to recovery, 3sec timeout (y/n)?";
-#			if [ "$REPLY" == "y" ]; then
-#				adb reboot recovery;
-#			fi;
-#		fi;
-#	fi;
+	# create zip-file for kernel. kernel zip name is based on toolchain used, modify to however you like
+	cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-NOUGAT-SGII-SABER"`.zip .;
 else
 	# with red-color
 	echo -e "\e[1;31mKernel STUCK in BUILD! no zImage exist\e[m"
