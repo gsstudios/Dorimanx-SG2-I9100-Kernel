@@ -205,7 +205,7 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	cp $KERNELDIR/zImage /$KERNELDIR/READY/boot/;
 
 	# create zip-file for kernel. kernel zip name is based on toolchain used, modify to however you like
-	cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-NOUGAT-SGII-SABER"`.zip .;
+	cd $KERNELDIR/READY/ && zip -r Kernel_${GETVER}-`date +"[%H-%M]-[%d-%m]-LOS14.1-SGII-SABER"`.zip .;
 else
 	# with red-color
 	echo -e "\e[1;31mKernel STUCK in BUILD! no zImage exist\e[m"
