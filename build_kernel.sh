@@ -64,16 +64,13 @@ fi;
 echo "Detected gcc version";
 echo  "a$GCCVERSION";
 # compiler detection
-if [ "a$GCCVERSION" == "a0404" ]; then
-	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_old_gcc $KERNELDIR/arch/arm/boot/compressed/Makefile;
-	echo "GCC 4.8.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0409" ]; then
+if [ "a$GCCVERSION" == "a0409" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 4.9.X Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0501" ]; then
+elif [ "a$GCCVERSION" == "a0504" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 5.4.x Compiler Detected, building";
-elif [ "a$GCCVERSION" == "a0600" ]; then
+elif [ "a$GCCVERSION" == "a0601" ]; then
 	cp $KERNELDIR/arch/arm/boot/compressed/Makefile_linaro $KERNELDIR/arch/arm/boot/compressed/Makefile;
 	echo "GCC 6.1.x Compiler Detected, building";
 else
