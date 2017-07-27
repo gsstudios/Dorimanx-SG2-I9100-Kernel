@@ -153,10 +153,10 @@ extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
 
 #define FSHIFT		11		/* nr of bits of precision */
 #define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
-#define LOAD_FREQ      (4*HZ+61)       /* 4.61 sec intervals */
-#define EXP_1          1896            /* 1/exp(4.61sec/1min) as fixed-point */
-#define EXP_5          2017            /* 1/exp(4.61sec/5min) */
-#define EXP_15         2038            /* 1/exp(4.61sec/15min) */
+#define LOAD_FREQ	(4*HZ+153)	/* 4.612 sec intervals (e.g.: for HZ=250 -> 4*250+153=1153 ticks, 1153/250=4.612 sec) */
+#define EXP_1    	1896		/* 1/exp(4.61sec/1min) as fixed-point */
+#define EXP_5    	2017		/* 1/exp(4.61sec/5min) */
+#define EXP_15    	2038		/* 1/exp(4.61sec/15min) */
 
 #define CALC_LOAD(load,exp,n) \
 	load *= exp; \
