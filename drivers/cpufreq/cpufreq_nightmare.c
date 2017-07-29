@@ -17,6 +17,7 @@
  */
 
 #include "cpufreq_governor.h"
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 
@@ -72,20 +73,20 @@ static struct nightmare_tuners {
 	int freq_step_dec_at_max_freq;
 
 } nightmare_tuners_ins = {
-	.sampling_rate = 50000,
-	.inc_cpu_load_at_min_freq = 40,
-	.inc_cpu_load = 60,
-	.dec_cpu_load = 60,
-#ifdef CONFIG_MACH_LGE
-	.freq_for_responsiveness = 1728000,
-	.freq_for_responsiveness_max = 2265600,
+	.sampling_rate = 60000,
+	.inc_cpu_load_at_min_freq = 60,
+	.inc_cpu_load = 70,
+	.dec_cpu_load = 50,
+#ifdef CONFIG_CPU_EXYNOS4210
+	.freq_for_responsiveness = 200000,
+	.freq_for_responsiveness_max = 1200000,
 #else
-	.freq_for_responsiveness = 1566000,
+	.freq_for_responsiveness = 540000,
 	.freq_for_responsiveness_max = 1890000,
 #endif
-	.freq_step_at_min_freq = 40,
-	.freq_step = 50,
-	.freq_up_brake_at_min_freq = 40,
+	.freq_step_at_min_freq = 20,
+	.freq_step = 20,
+	.freq_up_brake_at_min_freq = 30,
 	.freq_up_brake = 30,
 	.freq_step_dec = 10,
 	.freq_step_dec_at_max_freq = 10,
@@ -112,6 +113,20 @@ show_one(freq_up_brake_at_min_freq, freq_up_brake_at_min_freq);
 show_one(freq_up_brake, freq_up_brake);
 show_one(freq_step_dec, freq_step_dec);
 show_one(freq_step_dec_at_max_freq, freq_step_dec_at_max_freq);
+
+static ssize_t show_cpucore_table(struct kobject *kobj,
+				struct attribute *attr, char *buf)
+{
+	ssize_t count = 0;
+	int i;
+
+	for (i = CONFIG_NR_CPUS; i > 0; i--) {
+		count += sprintf(&buf[count], "%d ", i);
+	}
+	count += sprintf(&buf[count], "\n");
+
+	return count;
+}
 
 /* sampling_rate */
 static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
@@ -378,6 +393,7 @@ define_one_global_rw(freq_up_brake_at_min_freq);
 define_one_global_rw(freq_up_brake);
 define_one_global_rw(freq_step_dec);
 define_one_global_rw(freq_step_dec_at_max_freq);
+define_one_global_ro(cpucore_table);
 
 static struct attribute *nightmare_attributes[] = {
 	&sampling_rate.attr,
@@ -392,6 +408,7 @@ static struct attribute *nightmare_attributes[] = {
 	&freq_up_brake.attr,
 	&freq_step_dec.attr,
 	&freq_step_dec_at_max_freq.attr,
+	&cpucore_table.attr,
 	NULL
 };
 
@@ -590,8 +607,13 @@ static void do_nightmare_timer(struct work_struct *work)
 		delay -= jiffies % delay;
 	}
 
-	queue_delayed_work_on(this_nightmare_cpuinfo->cpu, nightmare_wq,
-			&this_nightmare_cpuinfo->work, delay);
+	#ifdef CONFIG_CPU_EXYNOS4210
+		mod_delayed_work_on(this_nightmare_cpuinfo->cpu, nightmare_wq,
+				&this_nightmare_cpuinfo->work, delay);
+	#else
+		queue_delayed_work_on(this_nightmare_cpuinfo->cpu, nightmare_wq,
+				&this_nightmare_cpuinfo->work, delay);
+	#endif
 	mutex_unlock(&this_nightmare_cpuinfo->timer_mutex);
 }
 
@@ -659,8 +681,13 @@ static int cpufreq_governor_nightmare(struct cpufreq_policy *policy,
 		}
 
 		INIT_DEFERRABLE_WORK(&this_nightmare_cpuinfo->work, do_nightmare_timer);
-		queue_delayed_work_on(cpu,
-			nightmare_wq, &this_nightmare_cpuinfo->work, delay);
+		#ifdef CONFIG_CPU_EXYNOS4210
+			mod_delayed_work_on(cpu,
+				nightmare_wq, &this_nightmare_cpuinfo->work, delay);
+		#else
+			queue_delayed_work_on(cpu,
+				nightmare_wq, &this_nightmare_cpuinfo->work, delay);
+		#endif
 
 		break;
 	case CPUFREQ_GOV_STOP:
@@ -674,10 +701,9 @@ static int cpufreq_governor_nightmare(struct cpufreq_policy *policy,
 		this_nightmare_cpuinfo->cur_policy = NULL;
 
 		nightmare_enable--;
-		if (!nightmare_enable) {
+		if (!nightmare_enable)
 			sysfs_remove_group(cpufreq_global_kobject,
 					   &nightmare_attr_group);
-		}
 		mutex_unlock(&nightmare_mutex);
 
 		break;
