@@ -702,6 +702,9 @@ struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 {
 	struct mm_struct *mm;
 	int err;
+	/* Allow system_server and android.bg to read task ram usage */
+	int android_bg = strcmp(current->comm, "android.bg");
+	int Binder_System = strncmp(current->comm, "Binder:1", 8);
 
 	err =  mutex_lock_killable(&task->signal->cred_guard_mutex);
 	if (err)
@@ -711,9 +714,17 @@ struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 
 	if (mm && mm != current->mm &&
 			!ptrace_may_access(task, mode)) {
+
+		if (Binder_System == 0)
+			goto done;
+		if (android_bg == 0)
+			goto done;
+
 		mmput(mm);
 		mm = ERR_PTR(-EACCES);
+		pr_info("FORK RAM DENY ACCESS TO: %s\n", current->comm);
 	}
+done:
 	mutex_unlock(&task->signal->cred_guard_mutex);
 
 	return mm;
