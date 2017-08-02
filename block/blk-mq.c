@@ -1112,7 +1112,7 @@ static int blk_mq_init_rq_map(struct blk_mq_hw_ctx *hctx,
 		int to_do;
 		void *p;
 
-		while (left < order_to_size(this_order - 1) && this_order)
+		while (this_order && left < order_to_size(this_order - 1))
 			this_order--;
 
 		do {
