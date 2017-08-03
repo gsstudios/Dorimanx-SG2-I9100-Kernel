@@ -72,6 +72,7 @@
 #include <linux/signalfd.h>
 #include <linux/uprobes.h>
 #include <linux/aio.h>
+#include <linux/compiler.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -301,7 +302,7 @@ void __init fork_init(unsigned long mempages)
 		init_task.signal->rlim[RLIMIT_NPROC];
 }
 
-int __attribute__((weak)) arch_dup_task_struct(struct task_struct *dst,
+int __weak arch_dup_task_struct(struct task_struct *dst,
 					       struct task_struct *src)
 {
 	*dst = *src;
@@ -702,21 +703,29 @@ struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 {
 	struct mm_struct *mm;
 	int err;
+	/* Allow system_server and android.bg to read task ram usage */
+	int android_bg = strcmp(current->comm, "android.bg");
+	int Binder_System = strncmp(current->comm, "Binder:1", 8);
 
 	err =  mutex_lock_killable(&task->signal->cred_guard_mutex);
 	if (err)
 		return ERR_PTR(err);
 
 	mm = get_task_mm(task);
-	/* !capable(CAP_SYS_RESOURCE) 
-	 * needed for android show memory usage by app
-	 */
+
 	if (mm && mm != current->mm &&
-			!ptrace_may_access(task, mode) &&
-			!capable(CAP_SYS_RESOURCE)) {
+			!ptrace_may_access(task, mode)) {
+
+		if (Binder_System == 0)
+			goto done;
+		if (android_bg == 0)
+			goto done;
+
 		mmput(mm);
 		mm = ERR_PTR(-EACCES);
+		pr_info("FORK RAM DENY ACCESS TO: %s\n", current->comm);
 	}
+done:
 	mutex_unlock(&task->signal->cred_guard_mutex);
 
 	return mm;
@@ -791,14 +800,12 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 	deactivate_mm(tsk, mm);
 
 	/*
-	 * If we're exiting normally, clear a user-space tid field if
-	 * requested.  We leave this alone when dying by signal, to leave
-	 * the value intact in a core dump, and to save the unnecessary
-	 * trouble, say, a killed vfork parent shouldn't touch this mm.
-	 * Userland only wants this done for a sys_exit.
+	 * Signal userspace if we're not exiting with a core dump
+	 * because we want to leave the value intact for debugging
+	 * purposes.
 	 */
 	if (tsk->clear_child_tid) {
-		if (!(tsk->flags & PF_SIGNALED) &&
+		if (!(tsk->signal->flags & SIGNAL_GROUP_COREDUMP) &&
 		    atomic_read(&mm->mm_users) > 1) {
 			/*
 			 * We don't check the error code - if userspace has
@@ -1093,15 +1100,6 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	return 0;
 }
 
-static void copy_flags(unsigned long clone_flags, struct task_struct *p)
-{
-	unsigned long new_flags = p->flags;
-
-	new_flags &= ~(PF_SUPERPRIV | PF_WQ_WORKER);
-	new_flags |= PF_FORKNOEXEC;
-	p->flags = new_flags;
-}
-
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 {
 	current->clear_child_tid = tidptr;
@@ -1120,12 +1118,12 @@ static void rt_mutex_init_task(struct task_struct *p)
 #endif
 }
 
-#ifdef CONFIG_MM_OWNER
+#ifdef CONFIG_MEMCG
 void mm_init_owner(struct mm_struct *mm, struct task_struct *p)
 {
 	mm->owner = p;
 }
-#endif /* CONFIG_MM_OWNER */
+#endif /* CONFIG_MEMCG */
 
 /*
  * Initialize POSIX timer handling for a single task.
@@ -1251,7 +1249,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 		goto bad_fork_cleanup_count;
 
 	delayacct_tsk_init(p);	/* Must remain after dup_task_struct() */
-	copy_flags(clone_flags, p);
+	p->flags &= ~(PF_SUPERPRIV | PF_WQ_WORKER);
+	p->flags |= PF_FORKNOEXEC;
 	INIT_LIST_HEAD(&p->children);
 	INIT_LIST_HEAD(&p->sibling);
 	rcu_copy_process(p);
@@ -1297,7 +1296,6 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 		p->mempolicy = NULL;
 		goto bad_fork_cleanup_cgroup;
 	}
-	mpol_fix_fork_child_flag(p);
 #endif
 #ifdef CONFIG_CPUSETS
 	p->cpuset_mem_spread_rotor = NUMA_NO_NODE;
@@ -1347,7 +1345,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 		goto bad_fork_cleanup_policy;
 	retval = audit_alloc(p);
 	if (retval)
-		goto bad_fork_cleanup_policy;
+		goto bad_fork_cleanup_perf;
 	/* copy all the process information */
 	retval = copy_semundo(clone_flags, p);
 	if (retval)
@@ -1508,7 +1506,9 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	total_forks++;
 	spin_unlock(&current->sighand->siglock);
+	syscall_tracepoint_update(p);
 	write_unlock_irq(&tasklist_lock);
+
 	proc_fork_connector(p);
 	cgroup_post_fork(p);
 	if (clone_flags & CLONE_THREAD)
@@ -1544,8 +1544,9 @@ bad_fork_cleanup_semundo:
 	exit_sem(p);
 bad_fork_cleanup_audit:
 	audit_free(p);
-bad_fork_cleanup_policy:
+bad_fork_cleanup_perf:
 	perf_event_free_task(p);
+bad_fork_cleanup_policy:
 #ifdef CONFIG_NUMA
 	mpol_put(p->mempolicy);
 bad_fork_cleanup_cgroup:
@@ -1628,10 +1629,12 @@ long do_fork(unsigned long clone_flags,
 	 */
 	if (!IS_ERR(p)) {
 		struct completion vfork;
+		struct pid *pid;
 
 		trace_sched_process_fork(current, p);
 
-		nr = task_pid_vnr(p);
+		pid = get_task_pid(p, PIDTYPE_PID);
+		nr = pid_vnr(pid);
 
 		if (clone_flags & CLONE_PARENT_SETTID)
 			put_user(nr, parent_tidptr);
@@ -1657,12 +1660,14 @@ long do_fork(unsigned long clone_flags,
 
 		/* forking complete and child started to run, tell ptracer */
 		if (unlikely(trace))
-			ptrace_event(trace, nr);
+			ptrace_event_pid(trace, pid);
 
 		if (clone_flags & CLONE_VFORK) {
 			if (!wait_for_vfork_done(p, &vfork))
-				ptrace_event(PTRACE_EVENT_VFORK_DONE, nr);
+				ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);
 		}
+
+		put_pid(pid);
 	} else {
 		nr = PTR_ERR(p);
 	}
@@ -1785,13 +1790,21 @@ static int check_unshare_flags(unsigned long unshare_flags)
 				CLONE_NEWUSER|CLONE_NEWPID))
 		return -EINVAL;
 	/*
-	 * Not implemented, but pretend it works if there is nothing to
-	 * unshare. Note that unsharing CLONE_THREAD or CLONE_SIGHAND
-	 * needs to unshare vm.
+	 * Not implemented, but pretend it works if there is nothing
+	 * to unshare.  Note that unsharing the address space or the
+	 * signal handlers also need to unshare the signal queues (aka
+	 * CLONE_THREAD).
 	 */
 	if (unshare_flags & (CLONE_THREAD | CLONE_SIGHAND | CLONE_VM)) {
-		/* FIXME: get_task_mm() increments ->mm_users */
-		if (atomic_read(&current->mm->mm_users) > 1)
+		if (!thread_group_empty(current))
+			return -EINVAL;
+	}
+	if (unshare_flags & (CLONE_SIGHAND | CLONE_VM)) {
+		if (atomic_read(&current->sighand->count) > 1)
+			return -EINVAL;
+	}
+	if (unshare_flags & CLONE_VM) {
+		if (!current_is_single_threaded())
 			return -EINVAL;
 	}
 
@@ -1860,15 +1873,15 @@ SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 	if (unshare_flags & CLONE_NEWUSER)
 		unshare_flags |= CLONE_THREAD | CLONE_FS;
 	/*
-	 * If unsharing a thread from a thread group, must also unshare vm.
-	 */
-	if (unshare_flags & CLONE_THREAD)
-		unshare_flags |= CLONE_VM;
-	/*
 	 * If unsharing vm, must also unshare signal handlers.
 	 */
 	if (unshare_flags & CLONE_VM)
 		unshare_flags |= CLONE_SIGHAND;
+	/*
+	 * If unsharing a signal handlers, must also unshare the signal queues.
+	 */
+	if (unshare_flags & CLONE_SIGHAND)
+		unshare_flags |= CLONE_THREAD;
 	/*
 	 * If unsharing namespace, must also unshare filesystem information.
 	 */
