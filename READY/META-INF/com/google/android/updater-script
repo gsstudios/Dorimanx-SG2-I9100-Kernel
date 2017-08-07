@@ -70,6 +70,7 @@ delete("/system/litepro");
 delete("/system/etc/init.d/99nstools");
 delete("/data/user.log");
 delete("/system/Hawker.u.copier");
+delete("/system/bin/install-recovery.sh");
 delete("/system/lib/hw/power.smdk4210.so");
 delete_recursive("/data/data/.drm");
 ui_print("");
