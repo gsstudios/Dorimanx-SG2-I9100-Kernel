@@ -883,11 +883,14 @@ static struct page *get_uksm_page(struct stable_node *stable_node,
 {
 	struct page *page;
 	void *expected_mapping;
+	unsigned long kpfn;
 
-	page = pfn_to_page(stable_node->kpfn);
+again:
+	kpfn = stable_node->kpfn;
+	page = pfn_to_page(kpfn);
 	expected_mapping = (void *)stable_node +
 				(PAGE_MAPPING_ANON | PAGE_MAPPING_KSM);
-	rcu_read_lock();
+
 	if (page->mapping != expected_mapping)
 		goto stale;
 	if (!get_page_unless_zero(page))
@@ -896,10 +899,26 @@ static struct page *get_uksm_page(struct stable_node *stable_node,
 		put_page(page);
 		goto stale;
 	}
-	rcu_read_unlock();
+
+	lock_page(page);
+	if (page->mapping != expected_mapping) {
+		unlock_page(page);
+		put_page(page);
+		goto stale;
+	}
+	unlock_page(page);
 	return page;
 stale:
-	rcu_read_unlock();
+	/*
+	 * We come here from above when page->mapping or !PageSwapCache
+	 * suggests that the node is stale; but it might be under migration.
+	 * We need smp_rmb(), matching the smp_wmb() in ksm_migrate_page(),
+	 * before checking whether node->kpfn has been changed.
+	 */
+	smp_rmb();
+	if (stable_node->kpfn != kpfn)
+		goto again;
+
 	remove_node_from_stable_tree(stable_node, unlink_rb, remove_tree_node);
 
 	return NULL;
@@ -984,6 +1003,76 @@ static inline bool uksm_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
+static inline unsigned long vma_pool_size(struct vma_slot *slot)
+{
+	return round_up(sizeof(struct rmap_list_entry) * slot->pages,
+			PAGE_SIZE) >> PAGE_SHIFT;
+}
+
+#define CAN_OVERFLOW_U64(x, delta) (U64_MAX - (x) < (delta))
+
+/* must be done with sem locked */
+static int slot_pool_alloc(struct vma_slot *slot)
+{
+	unsigned long pool_size;
+
+	if (slot->rmap_list_pool)
+		return 0;
+
+	pool_size = vma_pool_size(slot);
+	slot->rmap_list_pool = kzalloc(sizeof(struct page *) *
+				       pool_size, GFP_KERNEL);
+	if (!slot->rmap_list_pool)
+		return -ENOMEM;
+
+	slot->pool_counts = kzalloc(sizeof(unsigned int) * pool_size,
+				    GFP_KERNEL);
+	if (!slot->pool_counts) {
+		kfree(slot->rmap_list_pool);
+		return -ENOMEM;
+	}
+
+	slot->pool_size = pool_size;
+	BUG_ON(CAN_OVERFLOW_U64(uksm_pages_total, slot->pages));
+	slot->flags |= UKSM_SLOT_IN_UKSM;
+	uksm_pages_total += slot->pages;
+
+	return 0;
+}
+
+/*
+ * Called after vma is unlinked from its mm
+ */
+void uksm_remove_vma(struct vm_area_struct *vma)
+{
+	struct vma_slot *slot;
+
+	if (!vma->uksm_vma_slot)
+		return;
+
+	spin_lock(&vma_slot_list_lock);
+	slot = vma->uksm_vma_slot;
+	if (!slot)
+		goto out;
+
+	if (slot_in_uksm(slot)) {
+		/**
+		 * This slot has been added by ksmd, so move to the del list
+		 * waiting ksmd to free it.
+		 */
+		list_add_tail(&slot->slot_list, &vma_slot_del);
+	} else {
+		/**
+		 * It's still on new list. It's ok to free slot directly.
+		 */
+		list_del(&slot->slot_list);
+		free_vma_slot(slot);
+	}
+out:
+	vma->uksm_vma_slot = NULL;
+	spin_unlock(&vma_slot_list_lock);
+}
+
 /**
  * Need to do two things:
  * 1. check if slot was moved to del list
@@ -1028,6 +1117,11 @@ static int try_down_read_slot_mmap_sem(struct vma_slot *slot)
 
 	if (down_read_trylock(sem)) {
 		spin_unlock(&vma_slot_list_lock);
+		if (slot_pool_alloc(slot)) {
+			uksm_remove_vma(vma);
+			up_read(sem);
+			return -ENOENT;
+		}
 		return 0;
 	}
 
@@ -1137,35 +1231,6 @@ void uksm_vma_add_new(struct vm_area_struct *vma)
 	spin_unlock(&vma_slot_list_lock);
 }
 
-/*
- * Called after vma is unlinked from its mm
- */
-void uksm_remove_vma(struct vm_area_struct *vma)
-{
-	struct vma_slot *slot;
-
-	if (!vma->uksm_vma_slot)
-		return;
-
-	slot = vma->uksm_vma_slot;
-	spin_lock(&vma_slot_list_lock);
-	if (slot_in_uksm(slot)) {
-		/**
-		 * This slot has been added by ksmd, so move to the del list
-		 * waiting ksmd to free it.
-		 */
-		list_add_tail(&slot->slot_list, &vma_slot_del);
-	} else {
-		/**
-		 * It's still on new list. It's ok to free slot directly.
-		 */
-		list_del(&slot->slot_list);
-		free_vma_slot(slot);
-	}
-	spin_unlock(&vma_slot_list_lock);
-	vma->uksm_vma_slot = NULL;
-}
-
 /*   32/3 < they < 32/2 */
 #define shiftl	8
 #define shiftr	12
@@ -1253,11 +1318,6 @@ static u32 delta_hash(void *addr, int from, int to, u32 hash)
 
 	return hash;
 }
-
-
-
-
-#define CAN_OVERFLOW_U64(x, delta) (U64_MAX - (x) < (delta))
 
 /**
  *
@@ -3256,7 +3316,7 @@ static struct rmap_item *get_next_rmap_item(struct vma_slot *slot, u32 *hash)
 	if (find_zero_page_hash(hash_strength, *hash)) {
 		if (!cmp_and_merge_zero_page(slot->vma, page)) {
 			slot->pages_merged++;
-			__inc_zone_page_state(page, NR_UKSM_ZERO_PAGES);
+			inc_zone_page_state(page, NR_UKSM_ZERO_PAGES);
 			dec_mm_counter(slot->mm, MM_ANONPAGES);
 
 			/* For full-zero pages, no need to create rmap item */
@@ -3331,6 +3391,7 @@ out2:
 	put_page(rmap_item->page);
 out1:
 	slot->pages_scanned++;
+	slot->this_sampled++;
 	if (slot->fully_scanned_round != fully_scanned_round)
 		scanned_virtual_pages++;
 
@@ -3545,6 +3606,11 @@ static inline int vma_rung_down(struct vma_slot *slot)
 static unsigned long cal_dedup_ratio(struct vma_slot *slot)
 {
 	unsigned long ret;
+	unsigned long pages;
+
+	pages = slot->this_sampled;
+	if (!pages)
+		return 0;
 
 	BUG_ON(slot->pages_scanned == slot->last_scanned);
 
@@ -3560,7 +3626,7 @@ static unsigned long cal_dedup_ratio(struct vma_slot *slot)
 		}
 	}
 
-	return ret;
+	return ret * 100 / pages;
 }
 
 /**
@@ -3569,17 +3635,13 @@ static unsigned long cal_dedup_ratio(struct vma_slot *slot)
 static unsigned long cal_dedup_ratio_old(struct vma_slot *slot)
 {
 	unsigned long ret;
-	unsigned long pages_scanned;
+	unsigned long pages;
 
-	pages_scanned = slot->pages_scanned;
-	if (!pages_scanned) {
-		if (uksm_thrash_threshold)
-			return 0;
-		else
-			pages_scanned = slot->pages_scanned;
-	}
+	pages = slot->pages;
+	if (!pages)
+		return 0;
 
-	ret = slot->pages_bemerged * 100 / pages_scanned;
+	ret = slot->pages_bemerged;
 
 	/* Thrashing area filtering */
 	if (ret && uksm_thrash_threshold) {
@@ -3591,7 +3653,7 @@ static unsigned long cal_dedup_ratio_old(struct vma_slot *slot)
 		}
 	}
 
-	return ret;
+	return ret * 100 / pages;
 }
 
 /**
@@ -4118,9 +4180,10 @@ static void uksm_del_vma_slot(struct vma_slot *slot)
 
 out:
 	slot->rung = NULL;
-	BUG_ON(uksm_pages_total < slot->pages);
-	if (slot->flags & UKSM_SLOT_IN_UKSM)
+	if (slot->flags & UKSM_SLOT_IN_UKSM) {
+		BUG_ON(uksm_pages_total < slot->pages);
 		uksm_pages_total -= slot->pages;
+	}
 
 	if (slot->fully_scanned_round == fully_scanned_round)
 		scanned_virtual_pages -= slot->pages;
@@ -4248,48 +4311,12 @@ static void uksm_calc_scan_pages(void)
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
 #define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
 
-static inline unsigned long vma_pool_size(struct vma_slot *slot)
-{
-	return round_up(sizeof(struct rmap_list_entry) * slot->pages,
-			PAGE_SIZE) >> PAGE_SHIFT;
-}
-
 static void uksm_vma_enter(struct vma_slot **slots, unsigned long num)
 {
 	struct scan_rung *rung;
-	unsigned long pool_size, i;
-	struct vma_slot *slot;
-	int failed;
 
 	rung = &uksm_scan_ladder[0];
-
-	failed = 0;
-	for (i = 0; i < num; i++) {
-		slot = slots[i];
-
-		pool_size = vma_pool_size(slot);
-		slot->rmap_list_pool = kzalloc(sizeof(struct page *) *
-					       pool_size, GFP_KERNEL);
-		if (!slot->rmap_list_pool)
-			break;
-
-		slot->pool_counts = kzalloc(sizeof(unsigned int) * pool_size,
-					    GFP_KERNEL);
-		if (!slot->pool_counts) {
-			kfree(slot->rmap_list_pool);
-			break;
-		}
-
-		slot->pool_size = pool_size;
-		BUG_ON(CAN_OVERFLOW_U64(uksm_pages_total, slot->pages));
-		slot->flags |= UKSM_SLOT_IN_UKSM;
-		uksm_pages_total += slot->pages;
-	}
-
-	if (i)
-		rung_add_new_slots(rung, slots, i);
-
-	return;
+	rung_add_new_slots(rung, slots, num);
 }
 
 static struct vma_slot *batch_slots[SLOT_TREE_NODE_STORE_SIZE];
@@ -4363,6 +4390,7 @@ static inline void judge_slot(struct vma_slot *slot)
 
 	slot->pages_merged = 0;
 	slot->pages_cowed = 0;
+	slot->this_sampled = 0;
 
 	if (vma_fully_scanned(slot))
 		slot->pages_scanned = 0;
@@ -4712,6 +4740,14 @@ void ksm_migrate_page(struct page *newpage, struct page *oldpage)
 	if (stable_node) {
 		VM_BUG_ON(stable_node->kpfn != page_to_pfn(oldpage));
 		stable_node->kpfn = page_to_pfn(newpage);
+		/*
+		 * newpage->mapping was set in advance; now we need smp_wmb()
+		 * to make sure that the new stable_node->kpfn is visible
+		 * to get_ksm_page() before it can see that oldpage->mapping
+		 * has gone stale (or that PageSwapCache has been cleared).
+		 */
+		smp_wmb();
+		set_page_stable_node(oldpage, NULL);
 	}
 }
 #endif /* CONFIG_MIGRATION */
@@ -4796,7 +4832,7 @@ static ssize_t max_cpu_percentage_store(struct kobject *kobj,
 	unsigned long max_cpu_percentage;
 	int err;
 
-	err = strict_strtoul(buf, 10, &max_cpu_percentage);
+	err = kstrtoul(buf, 10, &max_cpu_percentage);
 	if (err || max_cpu_percentage > 100)
 		return -EINVAL;
 
@@ -4827,7 +4863,7 @@ static ssize_t sleep_millisecs_store(struct kobject *kobj,
 	if (!strcmp(current->comm, "init"))
 		return -EBUSY;
 
-	err = strict_strtoul(buf, 10, &msecs);
+	err = kstrtoul(buf, 10, &msecs);
 	if (err || msecs > MSEC_PER_SEC)
 		return -EINVAL;
 
@@ -4912,7 +4948,7 @@ static ssize_t run_store(struct kobject *kobj, struct kobj_attribute *attr,
 	int err;
 	unsigned long flags;
 
-	err = strict_strtoul(buf, 10, &flags);
+	err = kstrtoul(buf, 10, &flags);
 	if (err || flags > UINT_MAX)
 		return -EINVAL;
 	if (flags > UKSM_RUN_MERGE)
@@ -4943,7 +4979,7 @@ static ssize_t abundant_threshold_store(struct kobject *kobj,
 	int err;
 	unsigned long flags;
 
-	err = strict_strtoul(buf, 10, &flags);
+	err = kstrtoul(buf, 10, &flags);
 	if (err || flags > 99)
 		return -EINVAL;
 
@@ -4966,7 +5002,7 @@ static ssize_t thrash_threshold_store(struct kobject *kobj,
 	int err;
 	unsigned long flags;
 
-	err = strict_strtoul(buf, 10, &flags);
+	err = kstrtoul(buf, 10, &flags);
 	if (err || flags > 99)
 		return -EINVAL;
 
@@ -5030,7 +5066,7 @@ static ssize_t cpu_ratios_store(struct kobject *kobj,
 
 		if (strstr(p, "MAX/")) {
 			p = strchr(p, '/') + 1;
-			err = strict_strtoul(p, 10, &value);
+			err = kstrtoul(p, 10, &value);
 			if (err || value > TIME_RATIO_SCALE || !value) {
 				ret =  -EINVAL;
 				goto out;
@@ -5038,7 +5074,7 @@ static ssize_t cpu_ratios_store(struct kobject *kobj,
 
 			cpuratios[i] = - (int) (TIME_RATIO_SCALE / value);
 		} else {
-			err = strict_strtoul(p, 10, &value);
+			err = kstrtoul(p, 10, &value);
 			if (err || value > TIME_RATIO_SCALE || !value) {
 				ret = -EINVAL;
 				goto out;
@@ -5149,10 +5185,10 @@ static ssize_t eval_intervals_store(struct kobject *kobj,
 	int i, err;
 	unsigned long values[SCAN_LADDER_SIZE];
 	struct scan_rung *rung;
-	char *b, *p, *end = NULL;
+	char *p, *end = NULL;
 	ssize_t ret = count;
 
-	b = p = kzalloc(count, GFP_KERNEL);
+	p = kzalloc(count + 2, GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 
@@ -5169,7 +5205,7 @@ static ssize_t eval_intervals_store(struct kobject *kobj,
 			*end = '\0';
 		}
 
-		err = strict_strtoul(p, 10, &values[i]);
+		err = kstrtoul(p, 10, &values[i]);
 		if (err || !values[i]) {
 			ret = -EINVAL;
 			goto out;
@@ -5186,7 +5222,7 @@ static ssize_t eval_intervals_store(struct kobject *kobj,
 	}
 
 out:
-	kfree(b);
+	kfree(p);
 	return ret;
 }
 UKSM_ATTR(eval_intervals);
@@ -5323,7 +5359,7 @@ static ssize_t pages_to_scan_store(struct kobject *kobj,
 	unsigned long pages;
 	int err;
 
-	err = strict_strtoul(buf, 10, &pages);
+	err = kstrtoul(buf, 10, &pages);
 	if (err || pages > 1000000)
 		return -EINVAL;
 

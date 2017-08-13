@@ -38,6 +38,7 @@ struct vma_slot {
 	unsigned long fully_scanned_round;
 	unsigned long dedup_num;
 	unsigned long pages_scanned;
+	unsigned long this_sampled;
 	unsigned long last_scanned;
 	unsigned long pages_to_scan;
 	struct scan_rung *rung;
