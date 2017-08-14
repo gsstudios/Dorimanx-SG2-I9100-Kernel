@@ -12,10 +12,11 @@ ui_print("                 builds by Saber                ");
 ui_print("------------------------------------------------");
 ui_print("");
 
+mount("ext4", "EMMC", "/dev/block/mmcblk0p1", "/efs");
+mount("ext4", "EMMC", "/dev/block/mmcblk0p7", "/cache");
 mount("ext4", "EMMC", "/dev/block/mmcblk0p9", "/system");
 mount("ext4", "EMMC", "/dev/block/mmcblk0p10", "/data");
 mount("ext4", "EMMC", "/dev/block/mmcblk0p11", "/sdcard");
-mount("ext4", "EMMC", "/dev/block/mmcblk0p7", "/cache");
 mount("ext4", "EMMC", "/dev/block/mmcblk0p12", "/preload");
 
 # ---- Flash the kernel ----
@@ -73,11 +74,14 @@ delete("/system/Hawker.u.copier");
 delete("/system/bin/install-recovery.sh");
 delete("/system/lib/hw/power.smdk4210.so");
 delete_recursive("/data/data/.drm");
+delete_recursive("/system/etc/security/.drm");
+delete_recursive("/efs/.files");
 ui_print("");
 show_progress(1.000000, 0);
 ui_print("Cleaning complete!");
-unmount("/system");
 unmount("/preload");
-unmount("/data");
 unmount("/sdcard");
-
+unmount("/data");
+unmount("/system");
+unmount("/cache");
+unmount("/efs");
