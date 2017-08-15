@@ -156,12 +156,16 @@ static bool retransmits_timed_out(struct sock *sk,
 static int tcp_write_timeout(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
 	int retry_until;
 	bool do_reset, syn_set = false;
 
 	if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)) {
-		if (icsk->icsk_retransmits)
+		if (icsk->icsk_retransmits) {
 			dst_negative_advice(sk);
+			if (tp->syn_fastopen || tp->syn_data)
+				tcp_fastopen_cache_set(sk, 0, NULL, true);
+		}
 		retry_until = icsk->icsk_syn_retries ? : sysctl_tcp_syn_retries;
 		syn_set = true;
 	} else {
@@ -318,7 +322,7 @@ static void tcp_fastopen_synack_timer(struct sock *sk)
 	req = tcp_sk(sk)->fastopen_rsk;
 	req->rsk_ops->syn_ack_timeout(sk, req);
 
-	if (req->retrans >= max_retries) {
+	if (req->num_timeout >= max_retries) {
 		tcp_write_err(sk);
 		return;
 	}
@@ -327,10 +331,10 @@ static void tcp_fastopen_synack_timer(struct sock *sk)
 	 * regular retransmit because if the child socket has been accepted
 	 * it's not good to give up too easily.
 	 */
-	req->rsk_ops->rtx_syn_ack(sk, req, NULL);
-	req->retrans++;
+	inet_rtx_syn_ack(sk, req);
+	req->num_timeout++;
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-			  TCP_TIMEOUT_INIT << req->retrans, TCP_RTO_MAX);
+			  TCP_TIMEOUT_INIT << req->num_timeout, TCP_RTO_MAX);
 }
 
 /*
@@ -418,11 +422,7 @@ void tcp_retransmit_timer(struct sock *sk)
 		NET_INC_STATS_BH(sock_net(sk), mib_idx);
 	}
 
-	if (tcp_use_frto(sk)) {
-		tcp_enter_frto(sk);
-	} else {
-		tcp_enter_loss(sk, 0);
-	}
+	tcp_enter_loss(sk, 0);
 
 	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) {
 		/* Retransmission failed because of local congestion,

@@ -61,6 +61,7 @@ typedef enum {
 #include <linux/fcntl.h>	/* For O_CLOEXEC and O_NONBLOCK */
 #include <linux/kmemcheck.h>
 #include <linux/rcupdate.h>
+#include <linux/jump_label.h>
 
 struct poll_table_struct;
 struct pipe_inode_info;
@@ -278,6 +279,23 @@ do {								\
 
 #define net_random()		random32()
 #define net_srandom(seed)	srandom32((__force u32)seed)
+
+bool __net_get_random_once(void *buf, int nbytes, bool *done,
+			   struct static_key *done_key);
+
+#define net_get_random_once(buf, nbytes)				\
+	({								\
+		bool ___ret = false;					\
+		static bool ___done = false;				\
+		static struct static_key ___once_key =			\
+			STATIC_KEY_INIT_TRUE;				\
+		if (static_key_true(&___once_key))			\
+			___ret = __net_get_random_once(buf,		\
+						       nbytes,		\
+						       &___done,	\
+						       &___once_key);	\
+		___ret;							\
+	})
 
 extern int   	     kernel_sendmsg(struct socket *sock, struct msghdr *msg,
 				    struct kvec *vec, size_t num, size_t len);

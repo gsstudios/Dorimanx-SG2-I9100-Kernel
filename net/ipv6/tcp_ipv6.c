@@ -465,8 +465,8 @@ out:
 static int tcp_v6_send_synack(struct sock *sk, struct dst_entry *dst,
 			      struct flowi6 *fl6,
 			      struct request_sock *req,
-			      struct request_values *rvp,
-			      u16 queue_mapping)
+			      u16 queue_mapping,
+			      struct tcp_fastopen_cookie *foc)
 {
 	struct inet6_request_sock *treq = inet6_rsk(req);
 	struct ipv6_pinfo *np = inet6_sk(sk);
@@ -477,7 +477,7 @@ static int tcp_v6_send_synack(struct sock *sk, struct dst_entry *dst,
 	if (!dst && (dst = inet6_csk_route_req(sk, fl6, req)) == NULL)
 		goto done;
 
-	skb = tcp_make_synack(sk, dst, req, rvp, NULL);
+	skb = tcp_make_synack(sk, dst, req, foc);
 
 	if (skb) {
 		__tcp_v6_send_check(skb, &treq->loc_addr, &treq->rmt_addr);
@@ -492,13 +492,15 @@ done:
 	return err;
 }
 
-static int tcp_v6_rtx_synack(struct sock *sk, struct request_sock *req,
-			     struct request_values *rvp)
+static int tcp_v6_rtx_synack(struct sock *sk, struct request_sock *req)
 {
 	struct flowi6 fl6;
+	int res;
 
-	TCP_INC_STATS_BH(sock_net(sk), TCP_MIB_RETRANSSEGS);
-	return tcp_v6_send_synack(sk, NULL, &fl6, req, rvp, 0);
+	res = tcp_v6_send_synack(sk, NULL, &fl6, req, 0, NULL);
+	if (!res)
+		TCP_INC_STATS_BH(sock_net(sk), TCP_MIB_RETRANSSEGS);
+	return res;
 }
 
 static void tcp_v6_reqsk_destructor(struct request_sock *req)
@@ -988,7 +990,13 @@ static void tcp_v6_timewait_ack(struct sock *sk, struct sk_buff *skb)
 static void tcp_v6_reqsk_send_ack(struct sock *sk, struct sk_buff *skb,
 				  struct request_sock *req)
 {
-	tcp_v6_send_ack(skb, tcp_rsk(req)->snt_isn + 1, tcp_rsk(req)->rcv_isn + 1, req->rcv_wnd, req->ts_recent,
+	/* sk->sk_state == TCP_LISTEN -> for regular TCP_SYN_RECV
+	 * sk->sk_state == TCP_SYN_RECV -> for Fast Open.
+	 */
+	tcp_v6_send_ack(skb, (sk->sk_state == TCP_LISTEN) ?
+			tcp_rsk(req)->snt_isn + 1 : tcp_sk(sk)->snd_nxt,
+			tcp_rsk(req)->rcv_nxt,
+			req->rcv_wnd, req->ts_recent,
 			tcp_v6_md5_do_lookup(sk, &ipv6_hdr(skb)->daddr), 0);
 }
 
@@ -1031,17 +1039,17 @@ static struct sock *tcp_v6_hnd_req(struct sock *sk,struct sk_buff *skb)
  */
 static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 {
-	struct tcp_extend_values tmp_ext;
 	struct tcp_options_received tmp_opt;
-	const u8 *hash_location;
 	struct request_sock *req;
 	struct inet6_request_sock *treq;
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	__u32 isn = TCP_SKB_CB(skb)->when;
 	struct dst_entry *dst = NULL;
+	struct tcp_fastopen_cookie foc = { .len = -1 };
+	bool want_cookie = false, fastopen;
 	struct flowi6 fl6;
-	bool want_cookie = false;
+	int err;
 
 	if (skb->protocol == htons(ETH_P_IP))
 		return tcp_v4_conn_request(sk, skb);
@@ -1069,50 +1077,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 	tcp_clear_options(&tmp_opt);
 	tmp_opt.mss_clamp = IPV6_MIN_MTU - sizeof(struct tcphdr) - sizeof(struct ipv6hdr);
 	tmp_opt.user_mss = tp->rx_opt.user_mss;
-	tcp_parse_options(skb, &tmp_opt, &hash_location, 0, NULL);
-
-	if (tmp_opt.cookie_plus > 0 &&
-	    tmp_opt.saw_tstamp &&
-	    !tp->rx_opt.cookie_out_never &&
-	    (sysctl_tcp_cookie_size > 0 ||
-	     (tp->cookie_values != NULL &&
-	      tp->cookie_values->cookie_desired > 0))) {
-		u8 *c;
-		u32 *d;
-		u32 *mess = &tmp_ext.cookie_bakery[COOKIE_DIGEST_WORDS];
-		int l = tmp_opt.cookie_plus - TCPOLEN_COOKIE_BASE;
-
-		if (tcp_cookie_generator(&tmp_ext.cookie_bakery[0]) != 0)
-			goto drop_and_free;
-
-		/* Secret recipe starts with IP addresses */
-		d = (__force u32 *)&ipv6_hdr(skb)->daddr.s6_addr32[0];
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-		d = (__force u32 *)&ipv6_hdr(skb)->saddr.s6_addr32[0];
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-		*mess++ ^= *d++;
-
-		/* plus variable length Initiator Cookie */
-		c = (u8 *)mess;
-		while (l-- > 0)
-			*c++ ^= *hash_location++;
-
-		want_cookie = false;	/* not our kind of cookie */
-		tmp_ext.cookie_out_never = 0; /* false */
-		tmp_ext.cookie_plus = tmp_opt.cookie_plus;
-	} else if (!tp->rx_opt.cookie_in_always) {
-		/* redundant indications, but ensure initialization. */
-		tmp_ext.cookie_out_never = 1; /* true */
-		tmp_ext.cookie_plus = 0;
-	} else {
-		goto drop_and_free;
-	}
-	tmp_ext.cookie_in_always = tp->rx_opt.cookie_in_always;
+	tcp_parse_options(skb, &tmp_opt, 0, want_cookie ? NULL : &foc);
 
 	if (want_cookie && !tmp_opt.saw_tstamp)
 		tcp_clear_options(&tmp_opt);
@@ -1184,20 +1149,27 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 		isn = tcp_v6_init_sequence(skb);
 	}
 have_isn:
-	tcp_rsk(req)->snt_isn = isn;
 
 	if (security_inet_conn_request(sk, skb, req))
 		goto drop_and_release;
 
-	if (tcp_v6_send_synack(sk, dst, &fl6, req,
-			       (struct request_values *)&tmp_ext,
-			       skb_get_queue_mapping(skb)) ||
-	    want_cookie)
+	if (!dst && (dst = inet6_csk_route_req(sk, &fl6, req)) == NULL)
 		goto drop_and_free;
 
+	tcp_rsk(req)->snt_isn = isn;
 	tcp_rsk(req)->snt_synack = tcp_time_stamp;
-	tcp_rsk(req)->listener = NULL;
-	inet6_csk_reqsk_queue_hash_add(sk, req, TCP_TIMEOUT_INIT);
+	tcp_openreq_init_rwin(req, sk, dst);
+	fastopen = !want_cookie &&
+		   tcp_try_fastopen(sk, skb, req, &foc, dst);
+	err = tcp_v6_send_synack(sk, dst, &fl6, req,
+				 skb_get_queue_mapping(skb), &foc);
+	if (!fastopen) {
+		if (err || want_cookie)
+			goto drop_and_free;
+
+		tcp_rsk(req)->listener = NULL;
+		inet6_csk_reqsk_queue_hash_add(sk, req, TCP_TIMEOUT_INIT);
+	}
 	return 0;
 
 drop_and_release:
@@ -1365,7 +1337,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	tcp_initialize_rcv_mss(newsk);
 	tcp_synack_rtt_meas(newsk, req);
-	newtp->total_retrans = req->retrans;
+	newtp->total_retrans = req->num_retrans;
 
 	newinet->inet_daddr = newinet->inet_saddr = LOOPBACK4_IPV6;
 	newinet->inet_rcv_saddr = LOOPBACK4_IPV6;
@@ -1867,7 +1839,7 @@ static void get_openreq6(struct seq_file *seq,
 		   0,0, /* could print option size, but that is af dependent. */
 		   1,   /* timers active (only the expire timer) */
 		   jiffies_to_clock_t(ttd),
-		   req->retrans,
+		   req->num_timeout,
 		   from_kuid_munged(seq_user_ns(seq), uid),
 		   0,  /* non standard timer */
 		   0, /* open_requests have no inode */
