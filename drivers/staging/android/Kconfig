@@ -8,11 +8,6 @@ config ANDROID
 
 if ANDROID
 
-config ANDROID_BINDER_IPC
-	bool "Android Binder IPC Driver"
-	depends on MMU
-	default n
-
 config ANDROID_LOGGER
 	tristate "Android log driver"
 	default n
