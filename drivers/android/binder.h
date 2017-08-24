@@ -1,6 +1,10 @@
-/* include/linux/timed_gpio.h
- *
+/*
  * Copyright (C) 2008 Google, Inc.
+ *
+ * Based on, but no longer compatible with, the original
+ * OpenBinder.org binder driver interface, which is:
+ *
+ * Copyright (c) 2005 Palmsource, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -11,23 +15,16 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
-*/
+ */
 
-#ifndef _LINUX_TIMED_GPIO_H
-#define _LINUX_TIMED_GPIO_H
+#ifndef _LINUX_BINDER_H
+#define _LINUX_BINDER_H
 
-#define TIMED_GPIO_NAME "timed-gpio"
-
-struct timed_gpio {
-	const char *name;
-	unsigned	gpio;
-	int		max_timeout;
-	u8		active_low;
-};
-
-struct timed_gpio_platform_data {
-	int		num_gpios;
-	struct timed_gpio *gpios;
-};
-
+#ifdef CONFIG_ANDROID_BINDER_IPC_32BIT
+#define BINDER_IPC_32BIT 1
 #endif
+
+#include "uapi/linux/binder.h"
+
+#endif /* _LINUX_BINDER_H */
+

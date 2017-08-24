@@ -172,6 +172,8 @@ source "drivers/reset/Kconfig"
 
 source "drivers/fmc/Kconfig"
 
+source "drivers/android/Kconfig"
+
 source "drivers/phy/Kconfig"
 
 source "drivers/motor/Kconfig"

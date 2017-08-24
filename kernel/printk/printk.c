@@ -1700,7 +1700,7 @@ EXPORT_SYMBOL(printk_emit);
  *
  * See the vsnprintf() documentation for format string extensions over C99.
  */
-asmlinkage int printk(const char *fmt, ...)
+asmlinkage __visible int printk(const char *fmt, ...)
 {
 	va_list args;
 	int r;
@@ -1763,7 +1763,7 @@ void early_vprintk(const char *fmt, va_list ap)
 	}
 }
 
-asmlinkage void early_printk(const char *fmt, ...)
+asmlinkage __visible void early_printk(const char *fmt, ...)
 {
 	va_list ap;
 

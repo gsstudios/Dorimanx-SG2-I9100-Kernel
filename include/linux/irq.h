@@ -272,6 +272,11 @@ static inline void irqd_clr_chained_irq_inprogress(struct irq_data *d)
 	d->state_use_accessors &= ~IRQD_IRQ_INPROGRESS;
 }
 
+static inline irq_hw_number_t irqd_to_hwirq(struct irq_data *d)
+{
+	return d->hwirq;
+}
+
 /**
  * struct irq_chip - hardware interrupt chip descriptor
  *
@@ -520,24 +525,6 @@ static inline void irq_set_percpu_devid_flags(unsigned int irq)
 			     IRQ_NOPROBE | IRQ_PER_CPU_DEVID);
 }
 
-/* Handle dynamic irq creation and destruction */
-extern unsigned int create_irq_nr(unsigned int irq_want, int node);
-extern unsigned int __create_irqs(unsigned int from, unsigned int count,
-				  int node);
-extern int create_irq(void);
-extern void destroy_irq(unsigned int irq);
-extern void destroy_irqs(unsigned int irq, unsigned int count);
-
-/*
- * Dynamic irq helper functions. Obsolete. Use irq_alloc_desc* and
- * irq_free_desc instead.
- */
-extern void dynamic_irq_cleanup(unsigned int irq);
-static inline void dynamic_irq_init(unsigned int irq)
-{
-	dynamic_irq_cleanup(irq);
-}
-
 /* Set/get chip/data for an IRQ: */
 extern int irq_set_chip(unsigned int irq, struct irq_chip *chip);
 extern int irq_set_handler_data(unsigned int irq, void *data);
@@ -592,6 +579,14 @@ static inline struct msi_desc *irq_data_get_msi(struct irq_data *d)
 	return d->msi_desc;
 }
 
+static inline u32 irq_get_trigger_type(unsigned int irq)
+{
+	struct irq_data *d = irq_get_irq_data(irq);
+	return d ? irqd_get_trigger_type(d) : 0;
+}
+
+unsigned int arch_dynirq_lower_bound(unsigned int from);
+
 int __irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int node,
 		struct module *owner);
 
@@ -612,17 +607,29 @@ int __irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int node,
 	irq_alloc_descs(-1, from, cnt, node)
 
 void irq_free_descs(unsigned int irq, unsigned int cnt);
-int irq_reserve_irqs(unsigned int from, unsigned int cnt);
-
 static inline void irq_free_desc(unsigned int irq)
 {
 	irq_free_descs(irq, 1);
 }
 
-static inline int irq_reserve_irq(unsigned int irq)
+#ifdef CONFIG_GENERIC_IRQ_LEGACY_ALLOC_HWIRQ
+unsigned int irq_alloc_hwirqs(int cnt, int node);
+static inline unsigned int irq_alloc_hwirq(int node)
 {
-	return irq_reserve_irqs(irq, 1);
+	return irq_alloc_hwirqs(1, node);
 }
+void irq_free_hwirqs(unsigned int from, int cnt);
+static inline void irq_free_hwirq(unsigned int irq)
+{
+	return irq_free_hwirqs(irq, 1);
+}
+int arch_setup_hwirq(unsigned int irq, int node);
+void arch_teardown_hwirq(unsigned int irq);
+#endif
+
+#ifdef CONFIG_GENERIC_IRQ_LEGACY
+void irq_init_desc(unsigned int irq);
+#endif
 
 #ifndef irq_reg_writel
 # define irq_reg_writel(val, addr)	writel(val, addr)
@@ -686,6 +693,9 @@ struct irq_chip_type {
  * @wake_active:	Interrupt is marked as an wakeup from suspend source
  * @num_ct:		Number of available irq_chip_type instances (usually 1)
  * @private:		Private data for non generic chip callbacks
+ * @installed:		bitfield to denote installed interrupts
+ * @unused:		bitfield to denote unused interrupts
+ * @domain:		irq domain pointer
  * @list:		List head for keeping track of instances
  * @chip_types:		Array of interrupt irq_chip_types
  *
@@ -707,6 +717,9 @@ struct irq_chip_generic {
 	u32			wake_active;
 	unsigned int		num_ct;
 	void			*private;
+	unsigned long		installed;
+	unsigned long		unused;
+	struct irq_domain	*domain;
 	struct list_head	list;
 	struct irq_chip_type	chip_types[0];
 };
@@ -725,6 +738,24 @@ enum irq_gc_flags {
 	IRQ_GC_INIT_NESTED_LOCK		= 1 << 1,
 	IRQ_GC_MASK_CACHE_PER_TYPE	= 1 << 2,
 	IRQ_GC_NO_MASK			= 1 << 3,
+};
+
+/*
+ * struct irq_domain_chip_generic - Generic irq chip data structure for irq domains
+ * @irqs_per_chip:	Number of interrupts per chip
+ * @num_chips:		Number of chips
+ * @irq_flags_to_set:	IRQ* flags to set on irq setup
+ * @irq_flags_to_clear:	IRQ* flags to clear on irq setup
+ * @gc_flags:		Generic chip specific setup flags
+ * @gc:			Array of pointers to generic interrupt chips
+ */
+struct irq_domain_chip_generic {
+	unsigned int		irqs_per_chip;
+	unsigned int		num_chips;
+	unsigned int		irq_flags_to_clear;
+	unsigned int		irq_flags_to_set;
+	enum irq_gc_flags	gc_flags;
+	struct irq_chip_generic	*gc[0];
 };
 
 /* Generic chip callback functions */
@@ -750,6 +781,13 @@ void irq_setup_generic_chip(struct irq_chip_generic *gc, u32 msk,
 int irq_setup_alt_chip(struct irq_data *d, unsigned int type);
 void irq_remove_generic_chip(struct irq_chip_generic *gc, u32 msk,
 			     unsigned int clr, unsigned int set);
+
+struct irq_chip_generic *irq_get_domain_generic_chip(struct irq_domain *d, unsigned int hw_irq);
+int irq_alloc_domain_generic_chips(struct irq_domain *d, int irqs_per_chip,
+				   int num_ct, const char *name,
+				   irq_flow_handler_t handler,
+				   unsigned int clr, unsigned int set,
+				   enum irq_gc_flags flags);
 
 static inline struct irq_chip_type *irq_data_get_chip_type(struct irq_data *d)
 {

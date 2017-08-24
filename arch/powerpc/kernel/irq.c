@@ -619,13 +619,6 @@ void do_softirq_own_stack(void)
 		set_bits(irqtp->flags, &curtp->flags);
 }
 
-irq_hw_number_t virq_to_hw(unsigned int virq)
-{
-	struct irq_data *irq_data = irq_get_irq_data(virq);
-	return WARN_ON(!irq_data) ? 0 : irq_data->hwirq;
-}
-EXPORT_SYMBOL_GPL(virq_to_hw);
-
 #ifdef CONFIG_SMP
 int irq_choose_cpu(const struct cpumask *mask)
 {

@@ -234,7 +234,6 @@ asmlinkage __visible void __do_softirq(void)
 	bool in_hardirq;
 	__u32 pending;
 	int softirq_bit;
-	int cpu;
 
 	/*
 	 * Mask out PF_MEMALLOC s current task context is borrowed for the
@@ -249,7 +248,6 @@ asmlinkage __visible void __do_softirq(void)
 	__local_bh_disable_ip(_RET_IP_, SOFTIRQ_OFFSET);
 	in_hardirq = lockdep_softirq_start();
 
-	cpu = smp_processor_id();
 restart:
 	/* Reset the pending bitmask before enabling irqs */
 	set_softirq_pending(0);
@@ -278,11 +276,11 @@ restart:
 			       prev_count, preempt_count());
 			preempt_count_set(prev_count);
 		}
-		rcu_bh_qs(cpu);
 		h++;
 		pending >>= softirq_bit;
 	}
 
+	rcu_bh_qs(smp_processor_id());
 	local_irq_disable();
 
 	pending = local_softirq_pending();
@@ -664,9 +662,13 @@ static void run_ksoftirqd(unsigned int cpu)
 		 * in the task stack here.
 		 */
 		__do_softirq();
-		rcu_note_context_switch(cpu);
 		local_irq_enable();
 		cond_resched();
+
+		preempt_disable();
+		rcu_note_context_switch(cpu);
+		preempt_enable();
+
 		return;
 	}
 	local_irq_enable();
@@ -784,4 +786,9 @@ int __init __weak arch_probe_nr_irqs(void)
 int __init __weak arch_early_irq_init(void)
 {
 	return 0;
+}
+
+unsigned int __weak arch_dynirq_lower_bound(unsigned int from)
+{
+	return from;
 }
